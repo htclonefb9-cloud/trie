@@ -84,7 +84,7 @@ HTML_TEMPLATE = """
 <div class="main-container">
     <div class="top-header">
         <div class="brand-logo-area">
-            <span class="site-brand">CM88</span>
+            <span class="site-brand">Hoang Trieu</span>
             <span class="aviator-logo">Aviator</span>
         </div>
         <div class="wallet-actions">
