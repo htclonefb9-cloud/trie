@@ -31,7 +31,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aviator - Hoang Trieu Pro (1000x Edition)</title>
+    <title>Aviator - CM88 Continuous Edition</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #0b0e14; color: #ffffff; display: flex; justify-content: center; padding: 6px; }
@@ -52,7 +52,7 @@ HTML_TEMPLATE = """
         .history-pill { background: #1a1f29; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; color: #4caf50; white-space: nowrap; border: 1px solid #262c38; }
 
         .game-screen { width: 100%; height: 200px; background: radial-gradient(circle at center, #2e1028 0%, #0d1117 100%); border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; border: 1px solid #252b36; margin-bottom: 10px; }
-        .multiplier-text { font-size: 42px; font-weight: 900; z-index: 2; color: #ffffff; text-shadow: 0 2px 12px rgba(0,0,0,0.7); }
+        .multiplier-text { font-size: 44px; font-weight: 900; z-index: 2; color: #ffffff; text-shadow: 0 2px 12px rgba(0,0,0,0.7); }
         .plane-container { position: absolute; font-size: 36px; z-index: 1; transition: transform 0.05s linear; transform: rotate(15deg); }
         .status-msg { font-size: 11px; color: #8c929d; margin-top: 2px; z-index: 2; text-transform: uppercase; }
         .red-line { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(45deg, rgba(229, 57, 53, 0.3) 0%, transparent 60%); z-index: 1; pointer-events: none; }
@@ -84,7 +84,7 @@ HTML_TEMPLATE = """
 <div class="main-container">
     <div class="top-header">
         <div class="brand-logo-area">
-            <span class="site-brand">Hoang Trieu</span>
+            <span class="site-brand">CM88</span>
             <span class="aviator-logo">Aviator</span>
         </div>
         <div class="wallet-actions">
@@ -104,7 +104,7 @@ HTML_TEMPLATE = """
         <div class="red-line"></div>
         <div class="plane-container" id="planeIcon">✈️</div>
         <div class="multiplier-text" id="multiplierView">1.00x</div>
-        <div class="status-msg" id="statusView">Đang chờ cược...</div>
+        <div class="status-msg" id="statusView">Đang kết nối hệ thống...</div>
     </div>
 
     <!-- Bảng Cược 1 -->
@@ -152,10 +152,11 @@ HTML_TEMPLATE = """
 
 <script>
     let balance = parseFloat("{{ balance }}");
-    let gameState = 'IDLE'; 
+    let gameState = 'WAITING'; // WAITING (đợi 10s), RUNNING (đang bay), CRASHED (vừa nổ)
     let currentMultiplier = 1.00;
-    let crashPoint = 1.00;
-    let gameTimer = null;
+    let crashPoint = 2.00;
+    let startTime = 0;
+    let gameInterval = null;
 
     let bets = {
         1: { active: false, amount: 0, cashedOut: false },
@@ -163,16 +164,12 @@ HTML_TEMPLATE = """
     };
 
     function setBet(slot, val) {
-        if (gameState === 'IDLE' || gameState === 'WAITING') {
-            document.getElementById(`betInput${slot}`).value = val;
-        }
+        document.getElementById(`betInput${slot}`).value = val;
     }
 
     function adjustBet(slot, delta) {
-        if (gameState === 'IDLE' || gameState === 'WAITING') {
-            let inputEl = document.getElementById(`betInput${slot}`);
-            inputEl.value = Math.max(10, parseInt(inputEl.value) + delta);
-        }
+        let inputEl = document.getElementById(`betInput${slot}`);
+        inputEl.value = Math.max(10, parseInt(inputEl.value) + delta);
     }
 
     function updateBalanceUI() {
@@ -213,35 +210,39 @@ HTML_TEMPLATE = """
         }
     }
 
+    // Bấm cược bất cứ lúc nào (trong lúc chờ hoặc đang bay)
     function toggleBet(slot) {
         let inputEl = document.getElementById(`betInput${slot}`);
         let btnEl = document.getElementById(`mainBtn${slot}`);
         let amount = parseFloat(inputEl.value);
 
-        if (gameState === 'IDLE' || gameState === 'WAITING') {
-            if (!bets[slot].active) {
-                if (amount > balance) { alert('Không đủ xu!'); return; }
-                
-                fetch('/place_bet', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({amount: amount})
-                }).then(res => res.json()).then(data => {
-                    if(data.success) {
-                        balance = data.balance;
-                        updateBalanceUI();
-                        bets[slot].amount = amount;
-                        bets[slot].active = true;
-                        bets[slot].cashedOut = false;
+        if (!bets[slot].active) {
+            if (amount > balance) { alert('Không đủ xu!'); return; }
+            
+            fetch('/place_bet', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({amount: amount})
+            }).then(res => res.json()).then(data => {
+                if(data.success) {
+                    balance = data.balance;
+                    updateBalanceUI();
+                    bets[slot].amount = amount;
+                    bets[slot].active = true;
+                    bets[slot].cashedOut = false;
 
-                        inputEl.disabled = true;
+                    inputEl.disabled = true;
+                    if (gameState === 'RUNNING') {
+                        btnEl.className = 'action-btn btn-cash-style';
+                    } else {
                         btnEl.className = 'action-btn btn-cash-style';
                         btnEl.innerHTML = `HỦY<br><span style="font-size:10px;">CƯỢC</span>`;
-
-                        if (gameState === 'IDLE') startCountdown();
                     }
-                });
-            } else {
+                }
+            });
+        } else {
+            // Nếu đang chờ ván sau mà đổi ý thì hủy cược được hoàn tiền
+            if (gameState === 'WAITING') {
                 fetch('/refund_bet', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -250,116 +251,165 @@ HTML_TEMPLATE = """
                     balance = data.balance;
                     updateBalanceUI();
                     bets[slot].active = false;
-
                     inputEl.disabled = false;
                     btnEl.className = 'action-btn btn-bet-style';
                     btnEl.innerText = 'CƯỢC';
                 });
-            }
-        } else if (gameState === 'RUNNING' && bets[slot].active && !bets[slot].cashedOut) {
-            bets[slot].cashedOut = true;
-            let winAmt = bets[slot].amount * currentMultiplier;
+            } else if (gameState === 'RUNNING' && !bets[slot].cashedOut) {
+                // Rút tiền khi máy bay đang bay
+                bets[slot].cashedOut = true;
+                let winAmt = bets[slot].amount * currentMultiplier;
 
-            fetch('/cash_out', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({win_amount: winAmt})
-            }).then(res => res.json()).then(data => {
-                balance = data.balance;
-                updateBalanceUI();
-                btnEl.className = 'action-btn';
-                btnEl.style.backgroundColor = '#1f242d';
-                btnEl.style.color = '#4caf50';
-                btnEl.innerHTML = `ĐÃ RÚT<br><span style="font-size:10px;">+${winAmt.toFixed(0)}</span>`;
-            });
+                fetch('/cash_out', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({win_amount: winAmt})
+                }).then(res => res.json()).then(data => {
+                    balance = data.balance;
+                    updateBalanceUI();
+                    btnEl.className = 'action-btn';
+                    btnEl.style.backgroundColor = '#1f242d';
+                    btnEl.style.color = '#4caf50';
+                    btnEl.innerHTML = `ĐÃ RÚT<br><span style="font-size:10px;">+${winAmt.toFixed(0)}</span>`;
+                });
+            }
         }
     }
 
-    function startCountdown() {
-        gameState = 'WAITING';
-        document.getElementById('statusView').innerText = 'Chuẩn bị cất cánh...';
-        let count = 3;
-        let c = setInterval(() => {
-            document.getElementById('statusView').innerText = `Cất cánh sau ${count}s...`;
-            count--;
-            if(count < 0) { clearInterval(c); startFlight(); }
-        }, 600);
-    }
+    // Vòng lặp tự động liên tục trên client đồng bộ với server
+    function checkGameState() {
+        fetch('/get_state')
+        .then(res => res.json())
+        .then(state => {
+            gameState = state.status;
+            currentMultiplier = state.multiplier;
+            crashPoint = state.crash_point;
 
-    function startFlight() {
-        gameState = 'RUNNING';
-        document.getElementById('statusView').innerText = 'Máy bay đang bay!';
-        
-        for (let i = 1; i <= 2; i++) {
-            if (bets[i].active && !bets[i].cashedOut) {
-                document.getElementById(`mainBtn${i}`).className = 'action-btn btn-cash-style';
-            }
-        }
-
-        // Cập nhật khoảng nhân từ 1x đến 1000x
-        let rand = Math.random();
-        if (rand < 0.02) {
-            crashPoint = 1.00;
-        } else {
-            crashPoint = parseFloat((1.01 + Math.pow(Math.random(), 4) * 999).toFixed(2));
-            if (crashPoint > 1000) crashPoint = 1000.00;
-        }
-
-        let startTime = Date.now();
-
-        gameTimer = setInterval(() => {
-            let elapsed = (Date.now() - startTime) / 1000;
-            // Cho phép hệ số tăng mượt mà theo thời gian để có cơ hội đạt tới 1000x nếu ván đó siêu cao
-            currentMultiplier = 1.00 + elapsed * 0.4 + Math.pow(elapsed, 1.8) * 0.15;
-            if (currentMultiplier > crashPoint) currentMultiplier = crashPoint;
-
-            if (currentMultiplier >= crashPoint) {
-                currentMultiplier = crashPoint;
-                triggerCrash();
-            } else {
-                document.getElementById('multiplierView').innerText = currentMultiplier.toFixed(2) + 'x';
+            if (gameState === 'WAITING') {
+                document.getElementById('statusView').innerText = `Ván mới bắt đầu sau ${state.countdown}s`;
+                document.getElementById('multiplierView').innerText = '1.00x';
+                document.getElementById('planeIcon').style.transform = 'translate(0px, 0px) rotate(15deg)';
                 
+                // Reset nút bấm cho ván mới
                 for (let i = 1; i <= 2; i++) {
-                    if (bets[i].active && !bets[i].cashedOut) {
-                        let liveWin = (bets[i].amount * currentMultiplier).toFixed(0);
-                        document.getElementById(`mainBtn${i}`).innerHTML = `RÚT<br><span style="font-size:11px;">${liveWin}</span>`;
+                    if (!bets[i].active) {
+                        let btn = document.getElementById(`mainBtn${i}`);
+                        let inp = document.getElementById(`betInput${i}`);
+                        inp.disabled = false;
+                        btn.className = 'action-btn btn-bet-style';
+                        btn.style.backgroundColor = '';
+                        btn.style.color = 'white';
+                        btn.innerText = 'CƯỢC';
                     }
                 }
+            } else if (gameState === 'RUNNING') {
+                document.getElementById('statusView').innerText = 'Máy bay đang bay!';
+                document.getElementById('multiplierView').innerText = currentMultiplier.toFixed(2) + 'x';
                 
+                let elapsed = state.elapsed;
                 let px = Math.min(elapsed * 12, 110);
                 let py = Math.min(elapsed * 8, 55);
                 document.getElementById('planeIcon').style.transform = `translate(${px}px, -${py}px) rotate(15deg)`;
+
+                for (let i = 1; i <= 2; i++) {
+                    if (bets[i].active && !bets[i].cashedOut) {
+                        let btn = document.getElementById(`mainBtn${i}`);
+                        btn.className = 'action-btn btn-cash-style';
+                        let liveWin = (bets[i].amount * currentMultiplier).toFixed(0);
+                        btn.innerHTML = `RÚT<br><span style="font-size:11px;">${liveWin}</span>`;
+                    }
+                }
+            } else if (gameState === 'CRASHED') {
+                document.getElementById('multiplierView').innerText = crashPoint.toFixed(2) + 'x';
+                document.getElementById('statusView').innerText = '💥 Máy bay đã nổ!';
+
+                for (let i = 1; i <= 2; i++) {
+                    if (bets[i].active && !bets[i].cashedOut) {
+                        let btn = document.getElementById(`mainBtn${i}`);
+                        btn.className = 'action-btn';
+                        btn.style.backgroundColor = '#b71c1c';
+                        btn.innerText = 'THUA';
+                    }
+                    // Reset trạng thái cược cho ván sau
+                    bets[i].active = false;
+                    bets[i].cashedOut = false;
+                }
             }
-        }, 50);
-    }
-
-    function triggerCrash() {
-        clearInterval(gameTimer);
-        gameState = 'CRASHED';
-        document.getElementById('multiplierView').innerText = crashPoint.toFixed(2) + 'x';
-        document.getElementById('statusView').innerText = '💥 Máy bay đã bay đi!';
-
-        for (let i = 1; i <= 2; i++) {
-            if (bets[i].active && !bets[i].cashedOut) {
-                let btn = document.getElementById(`mainBtn${i}`);
-                btn.className = 'action-btn'; 
-                btn.style.backgroundColor = '#b71c1c'; 
-                btn.innerText = 'THUA';
-            }
-        }
-
-        fetch('/save_game', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({multiplier: crashPoint})
-        }).then(() => {
-            setTimeout(() => location.reload(), 3000);
         });
     }
+
+    // Gọi liên tục mỗi 100ms để mượt mà
+    setInterval(checkGameState, 100);
 </script>
 </body>
 </html>
 """
+
+# Quản lý trạng thái server toàn cục cho game liên tục
+import time
+game_state = {
+    "status": "WAITING", # WAITING, RUNNING, CRASHED
+    "multiplier": 1.00,
+    "crash_point": 2.00,
+    "start_time": 0,
+    "countdown_end": time.time() + 10,
+    "last_crash_time": 0
+}
+
+def update_game_loop():
+    global game_state
+    now = time.time()
+    
+    if game_state["status"] == "WAITING":
+        if now >= game_state["countdown_end"]:
+            # Bắt đầu bay
+            game_state["status"] = "RUNNING"
+            game_state["start_time"] = now
+            # Random crash từ 1x đến 1000x
+            r = random.random()
+            if r < 0.02:
+                game_state["crash_point"] = 1.00
+            else:
+                cp = 1.01 + (random.random() ** 4) * 999
+                game_state["crash_point"] = round(min(cp, 1000.0), 2)
+    elif game_state["status"] == "RUNNING":
+        elapsed = now - game_state["start_time"]
+        mul = 1.00 + elapsed * 0.4 + (elapsed ** 1.8) * 0.15
+        if mul >= game_state["crash_point"]:
+            game_state["multiplier"] = game_state["crash_point"]
+            game_state["status"] = "CRASHED"
+            game_state["last_crash_time"] = now
+            # Lưu lịch sử vào DB
+            with app.app_context():
+                new_h = GameHistory(multiplier=game_state["crash_point"])
+                db.session.add(new_h)
+                db.session.commit()
+        else:
+            game_state["multiplier"] = round(mul, 2)
+    elif game_state["status"] == "CRASHED":
+        # Nghỉ đúng 10 giây trước khi sang ván mới WAITING
+        if now - game_state["last_crash_time"] >= 10:
+            game_state["status"] = "WAITING"
+            game_state["countdown_end"] = now + 5 # 5 giây đếm ngược cất cánh
+
+@app.route('/get_state')
+def get_state():
+    update_game_loop()
+    now = time.time()
+    countdown = 0
+    elapsed = 0
+    if game_state["status"] == "WAITING":
+        countdown = max(0, int(game_state["countdown_end"] - now))
+    elif game_state["status"] == "RUNNING":
+        elapsed = now - game_state["start_time"]
+
+    return jsonify(
+        status=game_state["status"],
+        multiplier=game_state["multiplier"],
+        crash_point=game_state["crash_point"],
+        countdown=countdown,
+        elapsed=elapsed
+    )
 
 @app.route('/')
 def index():
@@ -414,15 +464,6 @@ def update_balance():
             return jsonify(success=True, balance=user.balance)
         return jsonify(success=False)
     return jsonify(success=False)
-
-@app.route('/save_game', methods=['POST'])
-def save_game():
-    data = request.json
-    mul = data.get('multiplier', 1.0)
-    new_h = GameHistory(multiplier=mul)
-    db.session.add(new_h)
-    db.session.commit()
-    return jsonify(success=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
