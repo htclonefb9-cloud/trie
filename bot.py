@@ -31,7 +31,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aviator - CM88 Pro (1000x Edition)</title>
+    <title>Aviator - Hoang Trieu Pro (1000x Edition)</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #0b0e14; color: #ffffff; display: flex; justify-content: center; padding: 6px; }
