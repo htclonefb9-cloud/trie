@@ -5,29 +5,28 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 
-# Cấu hình Database SQLite lưu ngay trên ổ đĩa của server
+# Cấu hình Database SQLite lưu trên ổ đĩa
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Định nghĩa bảng Người chơi (Lưu số dư vĩnh viễn)
+# Định nghĩa bảng Người chơi
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     balance = db.Column(db.Float, default=10000.0)
 
-# Định nghĩa bảng Lịch sử ván chơi (Lưu các hệ số nổ)
+# Định nghĩa bảng Lịch sử ván chơi
 class GameHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     multiplier = db.Column(db.Float, nullable=False)
 
 with app.app_context():
     db.create_all()
-    # Tạo tài khoản mặc định "player1" nếu chưa có
     if not User.query.filter_by(username="player1").first():
         default_user = User(username="player1", balance=10000.0)
-        db.add(default_user)
-        db.commit()
+        db.session.add(default_user)
+        db.session.commit()
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -129,7 +128,6 @@ HTML_TEMPLATE = """
         if (gameState === 'IDLE' || gameState === 'WAITING') {
             if (amount > balance) { alert('Không đủ xu!'); return; }
             
-            // Gửi yêu cầu trừ tiền xuống Database server
             fetch('/place_bet', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -150,7 +148,6 @@ HTML_TEMPLATE = """
                 }
             });
         } else if (gameState === 'RUNNING' && isBetPlaced && !isCashedOut) {
-            // Rút tiền và lưu số dư mới vào DB
             isCashedOut = true;
             let winAmt = betAmount * currentMultiplier;
 
@@ -219,7 +216,6 @@ HTML_TEMPLATE = """
             btn.innerText = 'THUA';
         }
 
-        // Lưu kết quả ván chơi lên server
         fetch('/save_game', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -246,7 +242,7 @@ def place_bet():
     user = User.query.filter_by(username="player1").first()
     if user.balance >= amount:
         user.balance -= amount
-        db.commit()
+        db.session.commit()
         return jsonify(success=True, balance=user.balance)
     return jsonify(success=False)
 
@@ -256,7 +252,7 @@ def cash_out():
     win_amount = data.get('win_amount', 0)
     user = User.query.filter_by(username="player1").first()
     user.balance += win_amount
-    db.commit()
+    db.session.commit()
     return jsonify(balance=user.balance)
 
 @app.route('/save_game', methods=['POST'])
@@ -264,8 +260,8 @@ def save_game():
     data = request.json
     mul = data.get('multiplier', 1.0)
     new_h = GameHistory(multiplier=mul)
-    db.add(new_h)
-    db.commit()
+    db.session.add(new_h)
+    db.session.commit()
     return jsonify(success=True)
 
 if __name__ == '__main__':
